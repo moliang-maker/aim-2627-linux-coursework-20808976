@@ -5,6 +5,14 @@ set -eu
 input=${1:?需要输入目录}
 output=${2:?需要输出目录}
 
-# TODO：删除下方提示和 exit 77，再填写你的命令。
-printf '%s\n' 'Q6 尚未实现' >&2
-exit 77
+sysroot="$output/sysroot"
+mkdir -p \
+    "$sysroot/var/lib/dpkg/updates" \
+    "$sysroot/var/lib/dpkg/info" \
+    "$sysroot/var/lib/dpkg/alternatives" \
+    "$sysroot/var/lib/dpkg/triggers" \
+    "$sysroot/usr/bin"
+touch "$sysroot/var/lib/dpkg/status"
+dpkg --root="$sysroot" --force-not-root --log=/dev/null \
+    --install "$input/aim-sentry-tools.deb"
+"$sysroot/usr/bin/aim-sentry-info" > "$output/tool-output.txt"

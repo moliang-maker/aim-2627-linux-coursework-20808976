@@ -5,6 +5,8 @@ set -eu
 input=${1:?需要输入目录}
 output=${2:?需要输出目录}
 
-# TODO：删除下方提示和 exit 77，再填写你的命令。
-printf '%s\n' 'Q1 尚未实现' >&2
-exit 77
+handover="$input/handover"
+mkdir -p "$output"
+printf '%s\n' "$handover" > "$output/location.txt"
+cp "$handover/.robot-id" "$output/robot-id.txt"
+cp "$input/notes/welcome.txt" "$output/welcome.txt"

@@ -7,6 +7,79 @@ output=${2:?需要输出目录}
 
 action=${3:-repair}
 
-# TODO：删除下方提示和 exit 77，再填写你的命令。
-printf '%s\n' 'Q8 尚未实现' >&2
-exit 77
+source "$input/process.env"
+
+process_running() {
+    local pid=$1
+    [ -r "/proc/$pid/stat" ] || return 1
+    local state
+    state=$(sed -n 's/^.*) \([^ ]\+\) .*$/\1/p' "/proc/$pid/stat")
+    [ "$state" != Z ]
+}
+
+wait_for_pid() {
+    local pid=$1
+    local attempt
+    for attempt in $(seq 1 50); do
+        if ! process_running "$pid"; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+
+if [ "$action" = repair ]; then
+    user_name=$(ps -p "$TARGET_PID" -o user=)
+    state=$(ps -p "$TARGET_PID" -o state=)
+    command_line=$(ps -p "$TARGET_PID" -o args=)
+    user_name=${user_name//[[:space:]]/}
+    state=${state//[[:space:]]/}
+    printf 'pid=%s\nuser=%s\nstate=%s\ncommand=%s\n' \
+        "$TARGET_PID" "$user_name" "$state" "$command_line" > "$output/process.txt"
+
+    for attempt in $(seq 1 50); do
+        if grep -q "^TICK $TARGET_TOKEN " "$WORKER_LOG" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+    done
+    cp "$WORKER_LOG" "$output/collector-sample.log"
+    kill -TERM "$TARGET_PID"
+    wait_for_pid "$TARGET_PID"
+
+    kill -TERM "$SERVICE_PID"
+    wait_for_pid "$SERVICE_PID"
+
+    printf 'bind=127.0.0.1\nport=%s\nroute=/status\n' \
+        "$TARGET_PORT" > "$output/server.conf"
+    bash "$START_TOOL" "$output/server.conf" "$output/service"
+
+    body="$output/http-body.tmp"
+    status=
+    for attempt in $(seq 1 50); do
+        if status=$(curl --silent --show-error --output "$body" \
+                --write-out '%{http_code}' \
+                "http://127.0.0.1:$TARGET_PORT/status" 2>/dev/null); then
+            break
+        fi
+        sleep 0.1
+    done
+    if [ -z "$status" ]; then
+        printf '%s\n' 'HTTP service did not become ready' >&2
+        exit 1
+    fi
+    mv "$body" "$output/http-body.txt"
+    printf '%s\n' "$status" > "$output/http-status.txt"
+elif [ "$action" = cleanup ]; then
+    if [ -r "$output/service/pid" ]; then
+        service_pid=$(<"$output/service/pid")
+        if process_running "$service_pid"; then
+            kill -TERM "$service_pid"
+            wait_for_pid "$service_pid"
+        fi
+    fi
+else
+    printf 'unknown action: %s\n' "$action" >&2
+    exit 2
+fi
