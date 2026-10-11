@@ -23,10 +23,10 @@ ssh -F "$config" -o BatchMode=yes -o ConnectTimeout=5 \
     aim-sentry whoami > "$output/remote-user.txt"
 
 remote_path=${REMOTE_LOG// /\\ }
-if scp -O -F "$config" -o BatchMode=yes -o ConnectTimeout=5 \
+if scp -F "$config" -o BatchMode=yes -o ConnectTimeout=5 \
         "aim-sentry:${remote_path}" "$output/received/errors.log"; then
     :
 else
-    scp -F "$config" -o BatchMode=yes -o ConnectTimeout=5 \
+    scp -O -F "$config" -o BatchMode=yes -o ConnectTimeout=5 \
         "aim-sentry:${remote_path}" "$output/received/errors.log"
 fi
