@@ -38,12 +38,23 @@ if [ "$action" = repair ]; then
     printf 'pid=%s\nuser=%s\nstate=%s\ncommand=%s\n' \
         "$TARGET_PID" "$user_name" "$state" "$command_line" > "$output/process.txt"
 
+    tick_count=0
     for attempt in $(seq 1 50); do
-        if grep -q "^TICK $TARGET_TOKEN " "$WORKER_LOG" 2>/dev/null; then
+        tick_count=$(awk -v token="$TARGET_TOKEN" \
+            '$1 == "TICK" && $2 == token { count++ }
+             END { print count + 0 }' "$WORKER_LOG" 2>/dev/null || true)
+
+        if [ "$tick_count" -ge 2 ]; then
             break
         fi
         sleep 0.1
     done
+
+    if [ "$tick_count" -lt 2 ]; then
+        printf 'collector produced %s target TICK records; expected 2\n' "$tick_count" >&2
+        exit 1
+    fi
+
     cp "$WORKER_LOG" "$output/collector-sample.log"
     kill -TERM "$TARGET_PID"
     wait_for_pid "$TARGET_PID"
